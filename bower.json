@@ -1,0 +1,22 @@
+{
+  "name": "bloom",
+  "version": "0.1.0",
+  "homepage": "https://github.com/BeranPanasper/bloom",
+  "authors": [
+    "BeranPanasper"
+  ],
+  "description": "HTML5 game engine",
+  "main": "dist/bloom-full.min.js",
+  "keywords": [
+    "game",
+    "gamedev"
+  ],
+  "license": "MIT",
+  "ignore": [
+    "**/.*",
+    "node_modules",
+    "bower_components",
+    "test",
+    "tests"
+  ]
+}
