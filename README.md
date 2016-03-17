@@ -11,14 +11,14 @@ In this example, we create a component object and a game object. The component o
 // that contains the main bloom classes.
 var core = bloom.require('core');
 
-// We create the actor with a specific name
+// We create our component with a specific name
 function MyLogComponent() {
-    // Call Actor super constructor
-    core.Actor.call(this);
+    // Call Component super constructor
+    core.Component.call(this);
 };
 
-// Make MyLogComponent inherits from bloom Actor class
-bloom.inherits(MyLogComponent, core.Actor);
+// Make MyLogComponent inherits from core Component class
+bloom.inherits(MyLogComponent, core.Component);
 
 // And create an update function. This function will 
 // be called at each game tick. 
@@ -52,7 +52,7 @@ Game.prototype.start = function() {
     // the actor into the layer
     layer.add(actor);
     // and the component in the actor
-    layer.add(actor);
+    actor.add(component);
 };
 
 // And we finally instanciate our Game class
