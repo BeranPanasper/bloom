@@ -7,6 +7,7 @@
 
     };
     core.Component.prototype.actor = null;
+    core.Component.prototype.state = null;
     core.Component.prototype.getLayer = function() {
         if (this.actor) {
             return this.actor.layer;

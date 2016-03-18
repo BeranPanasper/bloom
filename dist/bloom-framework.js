@@ -209,6 +209,7 @@
             throw new Error('Component is undefined');
         }
         this.components.push(component);
+        component.state = this.state;
         component.actor = this;
         this.layer.registerComponent(component);
     };
@@ -219,6 +220,7 @@
         if (i > -1) {
             cs.splice(i, 1);
         }
+        component.state = null;
         component.actor = null;
         this.layer.unregisterComponent(component);
     };
@@ -233,6 +235,7 @@
 
     };
     core.Component.prototype.actor = null;
+    core.Component.prototype.state = null;
     core.Component.prototype.getLayer = function() {
         if (this.actor) {
             return this.actor.layer;

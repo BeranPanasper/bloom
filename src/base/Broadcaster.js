@@ -1,16 +1,19 @@
-(function() {
+/*global bloom */
 
+(function () {
+    'use strict';
+    
     var broadcaster = bloom.ns('broadcaster'),
         subscriptions = {};
 
-    broadcaster.subscribe = function(e, cb) {
+    broadcaster.subscribe = function (e, cb) {
         if (!subscriptions.hasOwnProperty(e)) {
             subscriptions[e] = [];
         }
         subscriptions[e].push(cb);
     };
 
-    broadcaster.unsubscribe = function(e, cb) {
+    broadcaster.unsubscribe = function (e, cb) {
         if (!subscriptions.hasOwnProperty(e)) {
             return;
         }
@@ -22,7 +25,7 @@
         }
     };
 
-    broadcaster.publish = function(e) {
+    broadcaster.publish = function (e) {
         if (!subscriptions.hasOwnProperty(e)) {
             return;
         }

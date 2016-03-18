@@ -1,5 +1,8 @@
+/*global bloom*/
 
-(function() {
+(function () {
+    'use strict';
+    
     var utilities = bloom.ns('utilities');
 
     utilities.Pool = function Pool(constructor) {
@@ -18,7 +21,7 @@
             }
             return i;
         },
-        release: function(instance) {
+        release: function (instance) {
             if (!(instance instanceof this.constructor)) {
                 throw new Error('bloom: Releasing wrong class in pool');
             }
