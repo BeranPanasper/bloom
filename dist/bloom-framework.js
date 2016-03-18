@@ -1149,7 +1149,7 @@
     };
 
     math.random = function(min, max) {
-        return Math.round(Math.random() * (max - min) + min);
+        return Math.floor(Math.random() * (max - min) + min);
     };
 
 }());
@@ -1162,6 +1162,10 @@
         return str.replace(/{(\d+)}/g, function(match, number) {
             return typeof a[number] != 'undefined' ? a[number] : match;
         });
+    };
+
+    string.capitalize = function(str) {
+        return str[0].toUpperCase() + str.slice(1);
     };
 }());
 
