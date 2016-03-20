@@ -56,7 +56,7 @@
                     }
                 },
                 update: function(value) {
-                    el.innerText = value;
+                    el.textContent = value;
                 },
                 cleanup: function() {
                     if (!!this.subscription) {

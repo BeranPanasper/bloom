@@ -20,7 +20,7 @@
                 if (!t) {
                     this.html = string.format('Template "{0}" not found', this.template);
                 } else {
-                    this.html = t.innerText;
+                    this.html = t.textContent;
                 }
             }
             if (options.hasOwnProperty('context')) {

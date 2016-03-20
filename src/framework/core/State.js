@@ -39,6 +39,13 @@
         return this.v.hasOwnProperty(key);
     };
     core.State.prototype.get = function(key) {
+        var v = this.v;
+        if (!v.hasOwnProperty(key)) {
+            if (arguments.length > 1) {
+                return arguments[1];
+            }
+            return null;
+        }
         return this.v[key];
     };
 

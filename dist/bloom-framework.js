@@ -56,7 +56,7 @@
                     }
                 },
                 update: function(value) {
-                    el.innerText = value;
+                    el.textContent = value;
                 },
                 cleanup: function() {
                     if (!!this.subscription) {
@@ -611,6 +611,13 @@
         return this.v.hasOwnProperty(key);
     };
     core.State.prototype.get = function(key) {
+        var v = this.v;
+        if (!v.hasOwnProperty(key)) {
+            if (arguments.length > 1) {
+                return arguments[1];
+            }
+            return null;
+        }
         return this.v[key];
     };
 
@@ -620,6 +627,59 @@
 
 }());
 
+/*global bloom*/
+
+(function () {
+    'use strict';
+
+    var core = bloom.ns('core');
+
+    core.Vector = function (x, y, z) {
+        if (typeof x === 'number') {
+            this.x = x;
+        }
+        if (typeof y === 'number') {
+            this.y = y;
+        }
+        if (typeof z === 'number') {
+            this.z = z;
+        }
+    };
+
+    core.Vector.prototype.x = 0;
+    core.Vector.prototype.y = 0;
+    core.Vector.prototype.z = 0;
+
+    core.Vector.prototype.clone = function () {
+        return new core.Vector(this.x, this.y, this.z);
+    };
+
+    core.Vector.prototype.copy = function (vector) {
+        this.x = vector.x;
+        this.y = vector.y;
+        this.z = vector.z;
+        return this;
+    };
+    core.Vector.prototype.add = function (vector) {
+        this.x += vector.x;
+        this.y += vector.y;
+        this.z += vector.z;
+        return this;
+    };
+    core.Vector.prototype.multiplyScalar = function (v) {
+        this.x *= v;
+        this.y *= v;
+        this.z *= v;
+        return this;
+    };
+    core.Vector.prototype.multiply = function (vector) {
+        this.x *= vector.x;
+        this.y *= vector.y;
+        this.z *= vector.z;
+        return this;
+    };
+
+}());
 
 
 (function() {
@@ -778,6 +838,174 @@
 }());
 
 
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        core = bloom.ns('core');
+
+    particles.Particle = function (opts) {
+        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : null;
+        this.lt = 0;
+        this.position = opts && opts.hasOwnProperty('position') ? opts.position : new core.Vector();
+        this.delay = opts && opts.hasOwnProperty('delay') ? opts.delay : 0;
+        this.opacity = 1;
+        this.start();
+    };
+
+    particles.Particle.prototype.start = function () {
+    };
+    particles.Particle.prototype.update = function () {
+    };
+    particles.Particle.prototype.end = function () {
+    };
+
+    particles.Particle.prototype.pUpdate = function (system, delta, wind, gravity) {
+        var p = this.position,
+            d = this.delay,
+            b;
+        if (d > 0) {
+            d -= delta;
+            this.delay = d;
+            if (d > 0) {
+                return true;
+            } else {
+                this.start();
+            }
+        }
+
+        this.lt += delta;
+        if (this.lt >= this.lifetime) {
+            return false;
+        }
+        p.add(wind)
+            .add(gravity);
+
+        b = this.update();
+        return typeof b === 'boolean' ? b : true;
+    };
+
+    particles.Particle.prototype.pEnd = function () {
+        this.end();
+        if (!!this.position) {
+            this.position = null;
+        }
+    };
+
+}());
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        dom = bloom.ns('utilities.dom'),
+        core = bloom.ns('core');
+
+    particles.ParticleHTML = function (opts) {
+        particles.Particle.call(this, opts);
+        this.classname = opts && opts.hasOwnProperty('classname') ? opts.classname : '';
+        this.content = opts && opts.hasOwnProperty('content') ? opts.content : '';
+        this.container = opts && opts.hasOwnProperty('container') ? opts.container : null;
+    };
+
+    bloom.inherits(particles.ParticleHTML, particles.Particle);
+
+    particles.ParticleHTML.prototype.start = function () {
+        this.element = dom.create('span', {
+            'class': 'particle ' + this.classname,
+            innerHTML: this.content
+        });
+        if (!!this.container) {
+            this.container.appendChild(this.element);
+        }
+    };
+
+    particles.ParticleHTML.prototype.update = function () {
+        var s = this.element.style,
+            p = this.position;
+
+        s.left = p.x + 'px';
+        s.bottom = p.y + 'px';
+    };
+
+    particles.ParticleHTML.prototype.end = function () {
+        var e = this.element;
+        if (!!e) {
+            if (e.parentNode) {
+                e.parentNode.removeChild(e);
+            }
+            this.element = null;
+        }
+        if (!!this.container) {
+            this.container = null;
+        }
+    };
+
+
+}());
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        core = bloom.ns('core');
+
+    particles.System = function () {
+        this.gravity = new core.Vector(0, -1);
+        this.wind = new core.Vector();
+        this.position = null;
+        this.lifetime = 1000;
+        this.num = 5;
+        this.particles = [];
+        this.constr = particles.Particle;
+    };
+
+    particles.System.prototype.create = function () {
+        var p = new this.constr();
+        if (!!this.position) {
+            p.position.copy(this.position);
+        }
+        this.add(p);
+    };
+
+    particles.System.prototype.add = function (p) {
+        if (p.lifetime === null) {
+            p.lifetime = this.lifetime;
+        }
+        if (p.delay === 0) {
+            p.start();
+        }
+        this.particles.push(p);
+    };
+
+    particles.System.prototype.update = function (time, delta) {
+        var ps = this.particles,
+            p,
+            i,
+            l = ps.length,
+            currWind = this.wind.clone().multiplyScalar(delta / 10),
+            currGravity = this.gravity.clone().multiplyScalar(delta / 10);
+
+        for (i = l - 1; i >= 0; i -= 1) {
+            p = ps[i];
+            if (!p.pUpdate(this, delta, currWind, currGravity)) {
+                p.pEnd();
+                ps.splice(i, 1);
+            }
+        }
+    };
+    particles.System.prototype.end = function (p) {
+        var ps = this.particles,
+            i,
+            l = ps.length;
+        for (i = l - 1; i >= 0; i -= 1) {
+            ps[i].pEnd();
+        }
+    };
+
+
+}());
 
 
 (function() {
@@ -1220,7 +1448,7 @@
             if (!t) {
                 this.html = string.format('Template "{0}" not found', this.template);
             } else {
-                this.html = t.innerText;
+                this.html = t.textContent;
             }
         }
     };
@@ -1249,7 +1477,7 @@
                 if (!t) {
                     this.html = string.format('Template "{0}" not found', this.template);
                 } else {
-                    this.html = t.innerText;
+                    this.html = t.textContent;
                 }
             }
             if (options.hasOwnProperty('context')) {

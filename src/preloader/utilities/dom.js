@@ -12,7 +12,7 @@
         if (!!attrs) {
             for (k in attrs) {
                 if (attrs.hasOwnProperty(k)) {
-                    if (k === 'innerHTML' || k === 'innerText') {
+                    if (k === 'innerHTML' || k === 'textContent') {
                         el[k] = attrs[k];
                     } else {
                         el.setAttribute(k, attrs[k]);
