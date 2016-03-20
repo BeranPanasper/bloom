@@ -1,11 +1,13 @@
+/*global bloom*/
 
+(function () {
+    'use strict';
 
-(function() {
     var core = bloom.ns('core'),
-        string = bloom.require('utilities.string'),
-        dom = bloom.require('utilities.dom');
+        string = bloom.ns('utilities.string'),
+        dom = bloom.ns('utilities.dom');
 
-    core.LayerHTML = function(options) {
+    core.LayerHTML = function (options) {
         core.Layer.call(this);
         this.template = null;
         this.classname = null;
@@ -18,14 +20,14 @@
             }
         }
         this.element = dom.create('div', {
-            class: 'layer-html ' + (this.classname ? this.classname : '')
+            'class': 'layer-html ' + (this.classname || '')
         });
 
     };
 
     bloom.inherits(core.LayerHTML, core.Layer);
 
-    core.LayerHTML.prototype.start = function() {
+    core.LayerHTML.prototype.start = function () {
         dom.get('#wrapper').appendChild(this.element);
         if (!!this.template) {
             var t = dom.get('#tpl-' + this.template);
@@ -36,16 +38,16 @@
         }
     };
 
-    core.LayerHTML.prototype.end = function() {
+    core.LayerHTML.prototype.end = function () {
         this.element.innerHTML = '';
         dom.get('#wrapper').removeChild(this.element);
     };
-    core.LayerHTML.prototype.attachComponent = function(component) {
+    core.LayerHTML.prototype.attachComponent = function (component) {
         if (component.hasOwnProperty('html')) {
             this.element.innerHTML = component.html;
         }
     };
-    core.LayerHTML.prototype.detachComponent = function(component) {
+    core.LayerHTML.prototype.detachComponent = function (component) {
         if (component.hasOwnProperty('html')) {
             this.element.innerHTML = '';
         }

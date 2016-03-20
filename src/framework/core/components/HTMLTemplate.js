@@ -32,8 +32,6 @@
     bloom.inherits(components.HTMLTemplate, core.Component);
 
     components.HTMLTemplate.prototype.start = function() {
-        var context = this.context || this.actor;
-        binding.apply(this.getLayer().getElement(), context);
     };
 
     components.HTMLTemplate.prototype.end = function() {

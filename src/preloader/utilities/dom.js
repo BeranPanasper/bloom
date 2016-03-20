@@ -1,9 +1,13 @@
+/*global bloom*/
+
 (function () {
+    'use strict';
+
     var dom = bloom.ns('utilities.dom'),
         w = window,
         d = document;
 
-    dom.create = function(type, attrs) {
+    dom.create = function (type, attrs) {
         var el = d.createElement(type), k;
         if (!!attrs) {
             for (k in attrs) {
@@ -19,16 +23,15 @@
         return el;
     };
 
-    dom.on = function(e, cb) {
+    dom.on = function (e, cb) {
         w.addEventListener(e, cb);
     };
 
-    dom.off = function(e, cb) {
+    dom.off = function (e, cb) {
         w.removeEventListener(e, cb);
     };
 
-    dom.get = function(selector, el) {
+    dom.get = function (selector, el) {
         return (el || document).querySelector(selector);
     };
-
 }());
