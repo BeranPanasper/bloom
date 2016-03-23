@@ -4,11 +4,12 @@
     var core = bloom.ns('core'),
         array = bloom.ns('utilities.array');
 
-    core.Layer = function() {
+    core.Layer = function(opts) {
         this.actors = [];
         this.updatable = [];
         this.scene = null;
         this.element = null;
+        this.id = opts && opts.hasOwnProperty('id') ? opts.id : null;
     };
 
     core.Layer.prototype.getElement = function() {

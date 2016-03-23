@@ -27,10 +27,18 @@
 
     particles.ParticleHTML.prototype.update = function () {
         var s = this.element.style,
-            p = this.position;
+            p = this.position,
+            r = this.rot,
+            o = this.opacity;
 
         s.left = p.x + 'px';
         s.bottom = p.y + 'px';
+        if (!!r) {
+            s.transform = 'rotate(' + r + 'deg)';
+        }
+        if (!!o && o < 1) {
+            s.opacity = o;
+        }
     };
 
     particles.ParticleHTML.prototype.end = function () {

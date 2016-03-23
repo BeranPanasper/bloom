@@ -404,11 +404,12 @@
     var core = bloom.ns('core'),
         array = bloom.ns('utilities.array');
 
-    core.Layer = function() {
+    core.Layer = function(opts) {
         this.actors = [];
         this.updatable = [];
         this.scene = null;
         this.element = null;
+        this.id = opts && opts.hasOwnProperty('id') ? opts.id : null;
     };
 
     core.Layer.prototype.getElement = function() {
@@ -678,6 +679,18 @@
         this.z *= vector.z;
         return this;
     };
+    core.Vector.prototype.divideScalar = function (v) {
+        this.x /= v;
+        this.y /= v;
+        this.z /= v;
+        return this;
+    };
+    core.Vector.prototype.divide = function (vector) {
+        this.x /= vector.x;
+        this.y /= vector.y;
+        this.z /= vector.z;
+        return this;
+    };
 
 }());
 
@@ -845,12 +858,59 @@
     var particles = bloom.ns('particles'),
         core = bloom.ns('core');
 
+    particles.Emitter = function (opts) {
+        this.position = opts && opts.hasOwnProperty('position') ? opts.position : new core.Vector();
+        this.num = opts && opts.hasOwnProperty('num') ? opts.num : 10;
+        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : 1000;
+        this.constr = particles.Particle;
+    };
+
+    particles.Emitter.prototype.emit = function (system, num, factory) {
+        var p;
+        while (num >= 0) {
+            p = this.create(system, factory);
+            num -= 1;
+        }
+    };
+
+    particles.Emitter.prototype.create = function (system, factory) {
+        var p = !!factory ? factory() : new this.constr();
+        if (!!this.position && !p.position) {
+            p.position.copy(this.position);
+        }
+        if (p.lifetime === null) {
+            p.lifetime = this.lifetime;
+        }
+        system.add(p);
+        return p;
+    };
+
+
+    particles.Emitter.prototype.end = function () {
+        if (!!this.position) {
+            this.position = null;
+        }
+    };
+
+}());
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        core = bloom.ns('core');
+
     particles.Particle = function (opts) {
-        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : null;
+        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : 1000;
         this.lt = 0;
         this.position = opts && opts.hasOwnProperty('position') ? opts.position : new core.Vector();
+        this.rotation = opts && opts.hasOwnProperty('rotation') ? opts.rotation : 0;
+        this.rot = 0;
+        this.velocity = opts && opts.hasOwnProperty('velocity') ? opts.velocity : null;
         this.delay = opts && opts.hasOwnProperty('delay') ? opts.delay : 0;
         this.opacity = 1;
+        this.mass = opts && opts.hasOwnProperty('mass') ? opts.mass : 1.5;
+        this.disappear = opts && opts.hasOwnProperty('disappear') ? opts.disappear : -1;
         this.start();
     };
 
@@ -864,7 +924,12 @@
     particles.Particle.prototype.pUpdate = function (system, delta, wind, gravity) {
         var p = this.position,
             d = this.delay,
+            v = this.velocity,
+            r = this.rotation,
+            dis = this.disappear,
+            disd,
             b;
+
         if (d > 0) {
             d -= delta;
             this.delay = d;
@@ -879,8 +944,21 @@
         if (this.lt >= this.lifetime) {
             return false;
         }
+
+        this.rot += r;
+        if (dis > -1) {
+            disd = this.lifetime - dis;
+            if (this.lt > disd) {
+                this.opacity = 1 - (this.lt - disd) / dis;
+            }
+        }
         p.add(wind)
             .add(gravity);
+
+        if (!!v) {
+            p.add(v);
+            v.divideScalar(this.mass);
+        }
 
         b = this.update();
         return typeof b === 'boolean' ? b : true;
@@ -923,10 +1001,18 @@
 
     particles.ParticleHTML.prototype.update = function () {
         var s = this.element.style,
-            p = this.position;
+            p = this.position,
+            r = this.rot,
+            o = this.opacity;
 
         s.left = p.x + 'px';
         s.bottom = p.y + 'px';
+        if (!!r) {
+            s.transform = 'rotate(' + r + 'deg)';
+        }
+        if (!!o && o < 1) {
+            s.opacity = o;
+        }
     };
 
     particles.ParticleHTML.prototype.end = function () {
@@ -954,25 +1040,11 @@
     particles.System = function () {
         this.gravity = new core.Vector(0, -1);
         this.wind = new core.Vector();
-        this.position = null;
-        this.lifetime = 1000;
-        this.num = 5;
         this.particles = [];
-        this.constr = particles.Particle;
     };
 
-    particles.System.prototype.create = function () {
-        var p = new this.constr();
-        if (!!this.position) {
-            p.position.copy(this.position);
-        }
-        this.add(p);
-    };
 
     particles.System.prototype.add = function (p) {
-        if (p.lifetime === null) {
-            p.lifetime = this.lifetime;
-        }
         if (p.delay === 0) {
             p.start();
         }
@@ -1383,7 +1455,10 @@
 }());
 
 (function () {
-    var string = bloom.ns('utilities.string');
+    var string = bloom.ns('utilities.string'),
+        
+        urlizeAcc = 'Þßàáâãäåæçèéêëìíîïðñòóôõöøùúûýýþÿŕ',
+        urlizeNoAcc = 'bsaaaaaaaceeeeiiiidnoooooouuuyybyr';
 
     string.format = function(str) {
         var a = Array.prototype.slice.call(arguments, 1);
@@ -1397,6 +1472,24 @@
             return str;
         }
         return str[0].toUpperCase() + str.slice(1);
+    };
+
+    string.urlize = function(str, char) {
+            var str = str.toLowerCase().split(''),
+                s = [],
+                l = str.length,
+                y = 0,
+                i = -1 ;
+
+            for ( y; y < l; y+= 1) {
+                if (( i = urlizeAcc.indexOf(str[y]) ) > -1) {
+                  s[y] = urlizeNoAcc[i];
+                } else {
+                  s[y] = str[y];
+                }
+            }
+
+            return s.join('').trim().replace(/[^a-z0-9\-]/g,' ').split(' ').join('-').replace(/[\-]{1,}/g, char || '-');
     };
 }());
 
@@ -1572,15 +1665,18 @@
         colors = bloom.ns('game.colors'),
         dom = bloom.require('utilities.dom');
 
-    core.Layer2D = function() {
-        core.Layer.call(this);
+    core.Layer2D = function(opts) {
+        core.Layer.call(this, opts);
         this.template = null;
-        this.w = 800;
-        this.h = 450;
+        this.w = opts && opts.hasOwnProperty('width') ? opts.width : 800;
+        this.h = opts && opts.hasOwnProperty('height') ? opts.height : 450;
         this.element = dom.create('canvas', {
             width: this.w,
             height: this.h
         });
+        if (!!this.id) {
+            this.element.setAttribute('id', this.id);
+        }
         this.requiredRedraw = [];
         this.clearColor = null;
     };

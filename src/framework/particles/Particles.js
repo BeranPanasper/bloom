@@ -8,25 +8,11 @@
     particles.System = function () {
         this.gravity = new core.Vector(0, -1);
         this.wind = new core.Vector();
-        this.position = null;
-        this.lifetime = 1000;
-        this.num = 5;
         this.particles = [];
-        this.constr = particles.Particle;
     };
 
-    particles.System.prototype.create = function () {
-        var p = new this.constr();
-        if (!!this.position) {
-            p.position.copy(this.position);
-        }
-        this.add(p);
-    };
 
     particles.System.prototype.add = function (p) {
-        if (p.lifetime === null) {
-            p.lifetime = this.lifetime;
-        }
         if (p.delay === 0) {
             p.start();
         }

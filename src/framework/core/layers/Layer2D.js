@@ -5,15 +5,18 @@
         colors = bloom.ns('game.colors'),
         dom = bloom.require('utilities.dom');
 
-    core.Layer2D = function() {
-        core.Layer.call(this);
+    core.Layer2D = function(opts) {
+        core.Layer.call(this, opts);
         this.template = null;
-        this.w = 800;
-        this.h = 450;
+        this.w = opts && opts.hasOwnProperty('width') ? opts.width : 800;
+        this.h = opts && opts.hasOwnProperty('height') ? opts.height : 450;
         this.element = dom.create('canvas', {
             width: this.w,
             height: this.h
         });
+        if (!!this.id) {
+            this.element.setAttribute('id', this.id);
+        }
         this.requiredRedraw = [];
         this.clearColor = null;
     };

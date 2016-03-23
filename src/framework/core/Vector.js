@@ -49,5 +49,17 @@
         this.z *= vector.z;
         return this;
     };
+    core.Vector.prototype.divideScalar = function (v) {
+        this.x /= v;
+        this.y /= v;
+        this.z /= v;
+        return this;
+    };
+    core.Vector.prototype.divide = function (vector) {
+        this.x /= vector.x;
+        this.y /= vector.y;
+        this.z /= vector.z;
+        return this;
+    };
 
 }());
