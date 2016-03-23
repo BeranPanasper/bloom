@@ -408,6 +408,7 @@
         this.actors = [];
         this.updatable = [];
         this.scene = null;
+        this.dummy = null;
         this.element = null;
         this.id = opts && opts.hasOwnProperty('id') ? opts.id : null;
     };
@@ -424,6 +425,11 @@
     };
 
     core.Layer.prototype.add = function(actor) {
+        if (actor instanceof core.Component) {
+            this.addComponent(actor);
+            return;
+        }
+
         this.actors.push(actor);
         actor.layer = this;
 
@@ -444,6 +450,11 @@
         };
     };
     core.Layer.prototype.remove = function(actor) {
+        if (actor instanceof core.Component) {
+            this.removeComponent(actor);
+            return;
+        }
+
         var os = this.actors,
             us = this.updatable,
             i;
@@ -466,6 +477,20 @@
             us.splice(i, 1);
         }
     };
+
+    core.Layer.prototype.addComponent = function(component) {
+        if (!this.dummy) {
+            this.dummy = new core.Actor();
+            this.add(this.dummy);
+        }
+        this.dummy.add(component);
+    };
+    core.Layer.prototype.removeComponent = function(component) {
+        if (!!this.dummy) {
+            this.dummy.remove(component);
+        }
+    };
+
     core.Layer.prototype.registerComponent = function(component) {
         this.attachComponent(component);
         if (typeof component.start === 'function') {
@@ -1456,7 +1481,7 @@
 
 (function () {
     var string = bloom.ns('utilities.string'),
-        
+
         urlizeAcc = 'Þßàáâãäåæçèéêëìíîïðñòóôõöøùúûýýþÿŕ',
         urlizeNoAcc = 'bsaaaaaaaceeeeiiiidnoooooouuuyybyr';
 
