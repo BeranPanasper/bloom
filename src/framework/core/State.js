@@ -14,13 +14,13 @@
         if (!this.has(key)) {
             this.set(key, 0);
         }
-        return this.set(key, this.get(key) + (value || 1));
+        return this.set(key, this.get(key) + (typeof value === 'number' ? value : 1));
     };
     core.State.prototype.decrement = function(key, value) {
         if (!this.has(key)) {
             this.set(key, 0);
         }
-        return this.set(key, this.get(key) - (value || 1));
+        return this.set(key, this.get(key) - (typeof value === 'number' ? value : 1));
     };
     core.State.prototype.set = function(key, value) {
         if (this.v[key] !== value) {
