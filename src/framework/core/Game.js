@@ -30,16 +30,30 @@
             this.manifest = initializer.manifest;
         }
 
-        this.state = new core.State();
         this.sounds = new sound.SoundStore({
             manifest: this.manifest
         });
+
+        dom.get('#wrapper').innerHTML = '';
     };
 
-    core.Game.prototype.apply = function(f) {
-        var c = this.current;
-        if (c && typeof c[f] === 'function') {
-            c[f]();
+    core.Game.prototype.apply = function(scene, f) {
+        if (!scene) {
+            return;
+        }
+        if (f === 'end' && typeof scene.endTransition === 'function') {
+            scene.endTransition(function() {
+                if (typeof scene[f] === 'function') {
+                    scene.end();
+                }
+            });
+            return;
+        }
+        if (f === 'start' && typeof scene.startTransition === 'function') {
+            scene.startTransition();
+        }
+        if (typeof scene[f] === 'function') {
+            scene[f]();
         }
     };
 
@@ -53,16 +67,19 @@
     };
     core.Game.prototype.goto = function(id) {
         if (this.current !== null) {
-            this.apply('end');
+            this.apply(this.current, 'end');
             this.current = null;
+        } else {
+            console.log(dom.get('#wrapper').innerHTML);
+            dom.get('#wrapper').innerHTML = '';
         }
         if (!this.scenesById.hasOwnProperty(id)) {
             console.warn('Scene not found: "' + id + '"');
             return;
         }
-        dom.html('#wrapper', '');
+
         this.current = this.scenesById[id];
-        this.apply('start');
+        this.apply(this.current, 'start');
         if (!!this.paused) {
             this.play();
         }
@@ -70,13 +87,13 @@
     core.Game.prototype.pause = function() {
         if (!this.paused) {
             this.paused = true;
-            this.apply('triggerPause');
+            this.apply(this.current, 'triggerPause');
         }
     };
     core.Game.prototype.play = function() {
         if (!!this.paused) {
             this.paused = false;
-            this.apply('triggerPlay');
+            this.apply(this.current, 'triggerPlay');
         }
     };
     core.Game.prototype.switchPause = function() {
