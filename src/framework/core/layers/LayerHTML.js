@@ -39,8 +39,11 @@
     };
 
     core.LayerHTML.prototype.end = function () {
+        var wrapper = dom.get('#wrapper');
+        if (wrapper.contains(this.element)) {
+            wrapper.removeChild(this.element);
+        }
         this.element.innerHTML = '';
-        dom.get('#wrapper').removeChild(this.element);
     };
     core.LayerHTML.prototype.attachComponent = function (component) {
         if (component.hasOwnProperty('html')) {
