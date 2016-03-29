@@ -329,6 +329,9 @@
         dom.html('#wrapper', '');
         this.current = this.scenesById[id];
         this.apply('start');
+        if (!!this.paused) {
+            this.play();
+        }
     };
     core.Game.prototype.pause = function() {
         if (!this.paused) {
