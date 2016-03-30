@@ -50,14 +50,14 @@
             });
             return;
         }
-        if (f === 'start' && typeof scene.startTransition === 'function') {
-            scene.startTransition();
-        }
         if (typeof scene[f] === 'function') {
             if (f === 'end') {
                 scene.applyAutoRemoval();
             }
             scene[f]();
+        }
+        if (f === 'start' && typeof scene.startTransition === 'function') {
+            scene.startTransition();
         }
     };
 
