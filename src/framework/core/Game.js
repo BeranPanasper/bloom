@@ -43,6 +43,7 @@
         }
         if (f === 'end' && typeof scene.endTransition === 'function') {
             scene.endTransition(function() {
+                scene.applyAutoRemoval();
                 if (typeof scene[f] === 'function') {
                     scene.end();
                 }
@@ -53,6 +54,9 @@
             scene.startTransition();
         }
         if (typeof scene[f] === 'function') {
+            if (f === 'end') {
+                scene.applyAutoRemoval();
+            }
             scene[f]();
         }
     };

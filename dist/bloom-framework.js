@@ -309,6 +309,7 @@
         }
         if (f === 'end' && typeof scene.endTransition === 'function') {
             scene.endTransition(function() {
+                scene.applyAutoRemoval();
                 if (typeof scene[f] === 'function') {
                     scene.end();
                 }
@@ -319,6 +320,9 @@
             scene.startTransition();
         }
         if (typeof scene[f] === 'function') {
+            if (f === 'end') {
+                scene.applyAutoRemoval();
+            }
             scene[f]();
         }
     };
@@ -573,6 +577,7 @@
         this.game = null;
         this.layers = [];
         this.paused = false;
+        this.autoRemoval = true;
         if (!!options) {
             if (options.hasOwnProperty('id')) {
                 this.id = options.id;
@@ -608,6 +613,15 @@
         this.layers.push(layer);
         if (typeof layer.start === 'function') {
             layer.start();
+        }
+    };
+    core.Scene.prototype.applyAutoRemoval = function() {
+        if (!this.autoRemoval) {
+            return;
+        }
+        var ls = this.layers, l;
+        for (l = ls.length - 1; l >= 0; l -= 1) {
+            this.remove(ls[l]);
         }
     };
     core.Scene.prototype.remove = function(layer) {
@@ -1405,6 +1419,46 @@
 
 }());
 
+
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var tween = bloom.ns('tween'),
+        core = bloom.ns('core');
+
+    tween.Tween = function (opts) {
+        this.delay = opts.delay || 0;
+    };
+
+    tween.Tween.prototype.update = function (time, delta) {
+
+    };
+
+
+}());
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var tween = bloom.ns('tween'),
+        core = bloom.ns('core');
+
+    tween.Tweener = function () {
+        this.tweens = [];
+    };
+
+    tween.Tweener.prototype.update = function (time, delta) {
+        var ts = this.tweens, i, l = this.tweens.length;
+        for (i = 0; i < l; i += 1) {
+            ts.update();
+        }
+    };
+
+    tween.tweener = new tween.Tweener();
+
+
+}());
 (function () {
     var array = bloom.ns('utilities.array');
 

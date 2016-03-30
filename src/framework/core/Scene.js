@@ -9,6 +9,7 @@
         this.game = null;
         this.layers = [];
         this.paused = false;
+        this.autoRemoval = true;
         if (!!options) {
             if (options.hasOwnProperty('id')) {
                 this.id = options.id;
@@ -44,6 +45,15 @@
         this.layers.push(layer);
         if (typeof layer.start === 'function') {
             layer.start();
+        }
+    };
+    core.Scene.prototype.applyAutoRemoval = function() {
+        if (!this.autoRemoval) {
+            return;
+        }
+        var ls = this.layers, l;
+        for (l = ls.length - 1; l >= 0; l -= 1) {
+            this.remove(ls[l]);
         }
     };
     core.Scene.prototype.remove = function(layer) {
