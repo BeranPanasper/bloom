@@ -4,7 +4,7 @@ Bloom is an experimental HTML5 2D/3D game engine that follows the ECS pattern (E
 
 ### Hello World example
 
-In this example, we create a component object and a game object. The component object will log the current time in the HTML page.  
+In this example, we create a component object and a game object. The component object will log the current time in the HTML page.
 
 ```js
 // First we need to require the core package
@@ -20,8 +20,8 @@ function MyLogComponent() {
 // Make MyLogComponent inherits from core Component class
 bloom.inherits(MyLogComponent, core.Component);
 
-// And create an update function. This function will 
-// be called at each game tick. 
+// And create an update function. This function will
+// be called at each game tick.
 MyLogComponent.prototype.update = function(time, delta) {
     // Here we just set the HTML context with an hello world message
     this.getLayer().getElement().innerText = 'Hello world! Time is ' + time;
@@ -30,7 +30,7 @@ MyLogComponent.prototype.update = function(time, delta) {
 // Now let's create our game
 function Game() {
     // Call super constructor
-    core.Game.call(this);    
+    core.Game.call(this);
 };
 
 // Make our game inherits from bloom Game class
@@ -41,13 +41,13 @@ bloom.inherits(Game, core.Game);
 Game.prototype.start = function() {
     // We create a scene
     var scene = new core.Scene();
-    // An HTML layer 
+    // An HTML layer
     var layer = new core.LayerHTML();
     // An actor
     var actor = new core.Actor();
     // And we instanciate our component
     var component = new MyLogComponent();
-    
+
     // now we just need to register the layer into the scene
     scene.add(layer);
     // the actor into the layer

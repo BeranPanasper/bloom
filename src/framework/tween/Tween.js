@@ -16,6 +16,8 @@
     tween.Tween.prototype.delay = 0;
     tween.Tween.prototype.elapsed = 0;
     tween.Tween.prototype.duration = 1000;
+    tween.Tween.prototype.onEnd = null;
+    tween.Tween.prototype.onUpdate = null;
     tween.Tween.prototype.init = function (opts) {
         if (opts.hasOwnProperty('delay') && opts.delay !== undefined) {
             this.delay = opts.delay;
@@ -37,6 +39,17 @@
         } else {
             this.interpolation = interpolation.Linear;
         }
+        if (opts.hasOwnProperty('onUpdate') && opts.onUpdate !== undefined) {
+            this.onUpdate = opts.onUpdate;
+        } else {
+            this.onUpdate = null;
+        }
+        if (opts.hasOwnProperty('onEnd') && opts.onEnd !== undefined) {
+            this.onEnd = opts.onEnd;
+        } else {
+            this.onEnd = null;
+        }
+
         if (opts.hasOwnProperty('startValues') && opts.startValues !== undefined) {
             this.startValues = opts.startValues;
         } else if (opts.hasOwnProperty('from') && opts.from !== undefined) {
@@ -55,20 +68,29 @@
 
         this.elapsed = 0;
         this.result = {};
+        this.update(0, 0, true);
     };
 
-    tween.Tween.prototype.update = function (time, delta) {
+    tween.Tween.prototype.update = function (time, delta, force) {
         var starters = this.startValues,
             enders = this.endValues,
             object = this.result,
             elapsed = this.elapsed,
             duration = this.duration,
+            delay = this.delay,
             ended = false,
             start,
             end,
             value,
             property,
             cb = this.onUpdate;
+
+        if (!force && this.delay > 0) {
+            this.delay -= delta;
+            if (this.delay > 0) {
+                return true;
+            }
+        }
 
         elapsed += delta;
         if (elapsed >= duration) {

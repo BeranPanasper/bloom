@@ -157,6 +157,656 @@
 }());
 
 
+
+(function() {
+    var core = bloom.ns('core'),
+        array = bloom.ns('utilities.array'),
+        string = bloom.ns('utilities.string');
+
+    core.Actor = function() {
+        this.components = [];
+        this.layer = null;
+        this.state = new core.State();
+    };
+
+    core.Actor.prototype.play = function() {
+        array.apply(this.components, 'play');
+    };
+
+    core.Actor.prototype.pause = function() {
+        array.apply(this.components, 'pause');
+    };
+
+    core.Actor.prototype.getGame = function() {
+        return this.layer.scene.game;
+    };
+
+    core.Actor.prototype.requireRedraw = function() {
+        var cs = this.components,
+            i,
+            l = cs.length;
+        for (i = 0; i < l; i += 1) {
+            if (typeof cs[i].requireRedraw === 'function') {
+                cs[i].requireRedraw();
+            }
+        }
+    };
+
+    core.Actor.prototype.getComponent = function(constructor) {
+        var cs = this.components,
+            i,
+            l = cs.length;
+        for (i = 0; i < l; i += 1) {
+            if (cs[i] instanceof constructor) {
+                return cs[i];
+            }
+        }
+        return null;
+    };
+
+    core.Actor.prototype.add = function(component) {
+        if (!component) {
+            throw new Error('Component is undefined');
+        }
+        this.components.push(component);
+        component.state = this.state;
+        component.actor = this;
+        this.layer.registerComponent(component);
+    };
+
+    core.Actor.prototype.remove = function(component) {
+        var cs = this.components,
+            i = cs.indexOf(component);
+        if (i > -1) {
+            cs.splice(i, 1);
+        }
+        component.state = null;
+        component.actor = null;
+        this.layer.unregisterComponent(component);
+    };
+}());
+
+/*global bloom*/
+
+(function () {
+    'use strict';
+
+    var core = bloom.ns('core');
+
+    core.Component = function () {
+
+    };
+    core.Component.prototype.actor = null;
+    core.Component.prototype.state = null;
+    core.Component.prototype.getLayer = function () {
+        if (this.actor) {
+            return this.actor.layer;
+        }
+        return null;
+    };
+    core.Component.prototype.getComponent = function (constructor) {
+        if (this.actor) {
+            return this.actor.getComponent(constructor);
+        }
+        return null;
+    };
+    core.Component.prototype.getActor = function () {
+        return this.actor;
+    };
+    core.Component.prototype.getLayer = function () {
+        return this.actor.layer;
+    };
+    core.Component.prototype.getScene = function () {
+        return this.actor.layer.scene;
+    };
+    core.Component.prototype.getGame = function () {
+        return this.actor.layer.scene.game;
+    };
+}());
+
+
+
+(function() {
+    var core = bloom.ns('core'),
+        network = bloom.ns('network'),
+        sound = bloom.ns('sound'),
+        dom = bloom.ns('utilities.dom'),
+        string = bloom.ns('utilities.string');
+
+    core.instances = [];
+
+    /**
+     * A game is a holder for the scenes. It allows to
+     * navigate between each scene. It's also the initiator
+     * of the main loop for each game.
+     *
+     */
+    core.Game = function(initializer) {
+        this.current = null;
+        this.scenes = [];
+        this.scenesById = {};
+        this.loader = null;
+        this.manifest = null;
+        this.paused = false;
+        this.ts = 0;
+        core.instances.push(this);
+
+        if (initializer instanceof core.GameInitializer) {
+            this.loader = initializer.loader;
+            this.manifest = initializer.manifest;
+        }
+
+        this.sounds = new sound.SoundStore({
+            manifest: this.manifest
+        });
+
+        dom.get('#wrapper').innerHTML = '';
+    };
+
+    core.Game.prototype.apply = function(scene, f, id) {
+        if (!scene) {
+            return;
+        }
+        if (f === 'end' && typeof scene.endTransition === 'function') {
+            scene.endTransition(function() {
+                scene.applyAutoRemoval();
+                if (typeof scene[f] === 'function') {
+                    scene.end();
+                }
+            }, id);
+            return;
+        }
+        if (typeof scene[f] === 'function') {
+            if (f === 'end') {
+                scene.applyAutoRemoval();
+            }
+            scene[f]();
+        }
+        if (f === 'start' && typeof scene.startTransition === 'function') {
+            scene.startTransition(id);
+        }
+    };
+
+    core.Game.prototype.start = function () {
+        if (!this.scenes.length) {
+            throw new Error('No scene to start with!');
+        }
+        if (this.current === null) {
+            this.goto('main');
+        }
+    };
+    core.Game.prototype.goto = function(id) {
+        var currentId = null;
+        if (this.current !== null) {
+            currentId = this.current.id;
+            this.apply(this.current, 'end', id);
+            this.current = null;
+        } else {
+            dom.get('#wrapper').innerHTML = '';
+        }
+        if (!this.scenesById.hasOwnProperty(id)) {
+            console.warn('Scene not found: "' + id + '"');
+            return;
+        }
+
+        this.current = this.scenesById[id];
+        this.apply(this.current, 'start', currentId);
+        if (!!this.paused) {
+            this.play();
+        }
+    };
+    core.Game.prototype.pause = function() {
+        if (!this.paused) {
+            this.paused = true;
+            this.apply(this.current, 'triggerPause');
+        }
+    };
+    core.Game.prototype.play = function() {
+        if (!!this.paused) {
+            this.paused = false;
+            this.apply(this.current, 'triggerPlay');
+        }
+    };
+    core.Game.prototype.switchPause = function() {
+        if (this.paused) {
+            this.play();
+        } else {
+            this.pause();
+        }
+    };
+    core.Game.prototype.update = function (time, delta) {
+        this.delta = time - this.ts;
+        this.ts = time;
+        if (!!this.paused) {
+            return;
+        }
+        if (this.current !== null) {
+            this.current.update(time, this.delta);
+        }
+    };
+    core.Game.prototype.add = function(scene) {
+        if (!(scene instanceof core.Scene)) {
+            throw new Error('Given scene must be a bloom.core.Scene instance');
+        }
+        var id,
+            sbi = this.scenesById,
+            scs = this.scenes;
+
+        if (!scene.id && !scs.length) {
+            scene.id = 'main';
+        }
+        id = scene.id;
+        if (!id) {
+            throw new Error('Scene requires an ID');
+        }
+
+        scene.game = this;
+
+        if (sbi.hasOwnProperty(id)) {
+            if (sbi[id] !== scene) {
+                throw new Error(string.format('Another scene already has ID "{0}". Each scene ID must be unique.', id));
+            }
+        } else {
+            scs.push(scene);
+            sbi[id] = scene;
+        }
+    };
+    core.Game.prototype.remove = function(scene) {
+        if (!(scene instanceof core.Scene)) {
+            throw new Error('Given scene must be a bloom.core.Scene instance');
+        }
+
+        scene.game = null;
+
+        var i = this.scenes.indexOf(scene);
+        if (i > -1) {
+            this.scenes.splice(i, 1);
+        }
+        if (this.scenesById.hasOwnProperty(scene.id)) {
+            delete this.scenesById[scene.id];
+        }
+    };
+    core.Game.prototype.end = function() {
+        var is = core.instances,
+            i = is.indexOf(this);
+        if (i > -1) {
+            is.splice(i, 1);
+        }
+        this.current = null;
+    };
+
+}());
+
+
+
+(function() {
+    var core = bloom.ns('core'),
+        array = bloom.ns('utilities.array');
+
+    core.Layer = function(opts) {
+        this.actors = [];
+        this.updatable = [];
+        this.scene = null;
+        this.dummy = null;
+        this.element = null;
+        this.id = opts && opts.hasOwnProperty('id') ? opts.id : null;
+    };
+
+    core.Layer.prototype.getElement = function() {
+        return this.element;
+    };
+    core.Layer.prototype.play = function() {
+        array.apply(this.actors, 'play');
+    };
+
+    core.Layer.prototype.pause = function() {
+        array.apply(this.actors, 'pause');
+    };
+
+    core.Layer.prototype.add = function(actor) {
+        if (actor instanceof core.Component) {
+            this.addComponent(actor);
+            return;
+        }
+
+        this.actors.push(actor);
+        actor.layer = this;
+
+        if (typeof actor.update === 'function') {
+            this.updatable.push(actor);
+        }
+        if (typeof actor.start === 'function') {
+            actor.start();
+        }
+    };
+    core.Layer.prototype.update = function(time, delta) {
+        var us = this.updatable,
+            i,
+            l = us.length;
+
+        for (i = 0; i < l; i += 1) {
+            us[i].update(time, delta);
+        };
+    };
+    core.Layer.prototype.remove = function(actor) {
+        if (actor instanceof core.Component) {
+            this.removeComponent(actor);
+            return;
+        }
+
+        var os = this.actors,
+            us = this.updatable,
+            i;
+
+        if (typeof actor.end === 'function') {
+            actor.end();
+        }
+
+        this.unregisterComponentOf(actor);
+
+        actor.layer = null;
+
+        i = os.indexOf(actor);
+        if (i > -1) {
+            os.splice(i, 1);
+        }
+
+        i = us.indexOf(actor);
+        if (i > -1) {
+            us.splice(i, 1);
+        }
+    };
+
+    core.Layer.prototype.addComponent = function(component) {
+        if (!this.dummy) {
+            this.dummy = new core.Actor();
+            this.add(this.dummy);
+        }
+        this.dummy.add(component);
+    };
+    core.Layer.prototype.removeComponent = function(component) {
+        if (!!this.dummy) {
+            this.dummy.remove(component);
+        }
+    };
+
+    core.Layer.prototype.registerComponent = function(component) {
+        this.attachComponent(component);
+        if (typeof component.start === 'function') {
+            component.start();
+        }
+        if (typeof component.update === 'function') {
+            this.updatable.push(component);
+        }
+    };
+    core.Layer.prototype.unregisterComponentOf = function(actor) {
+        var ccs = actor.components, i, l = ccs.length;
+        for (i = 0; i < l; i += 1) {
+            this.unregisterComponent(ccs[i]);
+        }
+    };
+    core.Layer.prototype.unregisterComponent = function(component) {
+        var us = this.updatable,
+            i;
+
+        if (typeof component.end === 'function') {
+            component.end();
+        }
+
+        this.detachComponent(component);
+
+        if (typeof component.update === 'function') {
+            i = us.indexOf(component);
+            if (i > -1) {
+                us.splice(i, 1);
+            }
+        }
+    };
+    core.Layer.prototype.attachComponent = function(component) {};
+    core.Layer.prototype.detachComponent = function(component) {};
+
+}());
+
+
+
+(function() {
+    var core = bloom.ns('core'),
+        array = bloom.ns('utilities.array');
+
+    core.Scene = function(options) {
+        this.id = null;
+        this.game = null;
+        this.layers = [];
+        this.paused = false;
+        this.autoRemoval = true;
+        if (!!options) {
+            if (options.hasOwnProperty('id')) {
+                this.id = options.id;
+            }
+        }
+    };
+
+    core.Scene.prototype.triggerPlay = function() {
+        array.apply(this.layers, 'play');
+        if (typeof this.play === 'function') {
+            this.play();
+        }
+    };
+
+    core.Scene.prototype.triggerPause = function() {
+        array.apply(this.layers, 'pause');
+        if (typeof this.pause === 'function') {
+            this.pause();
+        }
+    };
+
+    core.Scene.prototype.update = function (time, delta) {
+        var ls = this.layers, i, l = ls.length;
+        for (i = 0; i < l; i += 1) {
+            ls[i].update(time, delta);
+        }
+    };
+    core.Scene.prototype.add = function(layer) {
+        if (!(layer instanceof core.Layer)) {
+            throw new Error('Given layer must be a bloom.core.Layer instance');
+        }
+        layer.scene = this;
+        this.layers.push(layer);
+        if (typeof layer.start === 'function') {
+            layer.start();
+        }
+    };
+    core.Scene.prototype.applyAutoRemoval = function() {
+        if (!this.autoRemoval) {
+            return;
+        }
+        var ls = this.layers, l;
+        for (l = ls.length - 1; l >= 0; l -= 1) {
+            this.remove(ls[l]);
+        }
+    };
+    core.Scene.prototype.remove = function(layer) {
+        if (!(layer instanceof core.Layer)) {
+            throw new Error('Given layer must be a bloom.core.Layer instance');
+        }
+
+        layer.scene = null;
+        if (typeof layer.end === 'function') {
+            layer.end();
+        }
+        var i = this.layers.indexOf(layer);
+        if (i > -1) {
+            this.layers.splice(i, 1);
+        }
+    };
+    core.Scene.prototype.destroy = function() {
+        this.layers = null;
+    };
+
+}());
+
+
+
+(function() {
+    var core = bloom.ns('core');
+
+    core.State = function () {
+        bloom.EventDispatcher.call(this);
+        this.v = {};
+    };
+
+    bloom.inherits(core.State, bloom.EventDispatcher);
+
+    core.State.prototype.increment = function(key, value) {
+        if (!this.has(key)) {
+            this.set(key, 0);
+        }
+        return this.set(key, this.get(key) + (typeof value === 'number' ? value : 1));
+    };
+    core.State.prototype.decrement = function(key, value) {
+        if (!this.has(key)) {
+            this.set(key, 0);
+        }
+        return this.set(key, this.get(key) - (typeof value === 'number' ? value : 1));
+    };
+    core.State.prototype.set = function(key, value) {
+        if (this.v[key] !== value) {
+            this.v[key] = value;
+            var e = {
+                type: 'change',
+                key: key,
+                value: value,
+                state: this
+            };
+            this.dispatch(e);
+        }
+    };
+
+    core.State.prototype.has = function(key) {
+        return this.v.hasOwnProperty(key);
+    };
+    core.State.prototype.get = function(key) {
+        var v = this.v;
+        if (!v.hasOwnProperty(key)) {
+            if (arguments.length > 1) {
+                return arguments[1];
+            }
+            return null;
+        }
+        return this.v[key];
+    };
+
+    core.State.prototype.all = function() {
+        return this.v;
+    };
+
+}());
+
+/*global bloom*/
+
+(function () {
+    'use strict';
+
+    var core = bloom.ns('core');
+
+    core.Vector = function (x, y, z) {
+        if (typeof x === 'number') {
+            this.x = x;
+        }
+        if (typeof y === 'number') {
+            this.y = y;
+        }
+        if (typeof z === 'number') {
+            this.z = z;
+        }
+    };
+
+    core.Vector.prototype.x = 0;
+    core.Vector.prototype.y = 0;
+    core.Vector.prototype.z = 0;
+
+    core.Vector.prototype.clone = function () {
+        return new core.Vector(this.x, this.y, this.z);
+    };
+
+    core.Vector.prototype.copy = function (vector) {
+        this.x = vector.x;
+        this.y = vector.y;
+        this.z = vector.z;
+        return this;
+    };
+    core.Vector.prototype.add = function (vector) {
+        this.x += vector.x;
+        this.y += vector.y;
+        this.z += vector.z;
+        return this;
+    };
+    core.Vector.prototype.multiplyScalar = function (v) {
+        this.x *= v;
+        this.y *= v;
+        this.z *= v;
+        return this;
+    };
+    core.Vector.prototype.multiply = function (vector) {
+        this.x *= vector.x;
+        this.y *= vector.y;
+        this.z *= vector.z;
+        return this;
+    };
+    core.Vector.prototype.divideScalar = function (v) {
+        this.x /= v;
+        this.y /= v;
+        this.z /= v;
+        return this;
+    };
+    core.Vector.prototype.divide = function (vector) {
+        this.x /= vector.x;
+        this.y /= vector.y;
+        this.z /= vector.z;
+        return this;
+    };
+
+}());
+
+/*global bloom, requestAnimationFrame*/
+(function () {
+    'use strict';
+
+    var loop = bloom.ns('core.loop'),
+        debug = bloom.ns('core.debug'),
+        tween = bloom.ns('tween'),
+        core = bloom.ns('core'),
+
+        instances = core.instances,
+        i,
+        l,
+
+        delta,
+        ts = 0,
+        tweener;
+
+    loop.animate = function (time) {
+
+        requestAnimationFrame(loop.animate);
+
+        delta = time - ts;
+        ts = time;
+
+        for (i = 0, l = instances.length; i < l; i += 1) {
+            instances[i].update(ts);
+        }
+
+        if (!tweener) {
+            tweener = tween.tweener;
+        } else {
+            tweener.update(ts, delta);
+        }
+    };
+
+    loop.animate(0);
+}());
+
+
 (function() {
     var input = bloom.ns('input'),
         keyboard = bloom.ns('input.keyboard');
@@ -296,6 +946,233 @@
 }());
 
 
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        core = bloom.ns('core');
+
+    particles.Emitter = function (opts) {
+        this.position = opts && opts.hasOwnProperty('position') ? opts.position : new core.Vector();
+        this.num = opts && opts.hasOwnProperty('num') ? opts.num : 10;
+        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : 1000;
+        this.constr = particles.Particle;
+    };
+
+    particles.Emitter.prototype.emit = function (system, num, factory) {
+        var p;
+        while (num >= 0) {
+            p = this.create(system, factory);
+            num -= 1;
+        }
+    };
+
+    particles.Emitter.prototype.create = function (system, factory) {
+        var p = !!factory ? factory() : new this.constr();
+        if (!!this.position && !p.position) {
+            p.position.copy(this.position);
+        }
+        if (p.lifetime === null) {
+            p.lifetime = this.lifetime;
+        }
+        system.add(p);
+        return p;
+    };
+
+
+    particles.Emitter.prototype.end = function () {
+        if (!!this.position) {
+            this.position = null;
+        }
+    };
+
+}());
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        core = bloom.ns('core');
+
+    particles.Particle = function (opts) {
+        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : 1000;
+        this.lt = 0;
+        this.position = opts && opts.hasOwnProperty('position') ? opts.position : new core.Vector();
+        this.rotation = opts && opts.hasOwnProperty('rotation') ? opts.rotation : 0;
+        this.rot = 0;
+        this.velocity = opts && opts.hasOwnProperty('velocity') ? opts.velocity : null;
+        this.delay = opts && opts.hasOwnProperty('delay') ? opts.delay : 0;
+        this.opacity = 1;
+        this.mass = opts && opts.hasOwnProperty('mass') ? opts.mass : 1.5;
+        this.disappear = opts && opts.hasOwnProperty('disappear') ? opts.disappear : -1;
+        this.start();
+    };
+
+    particles.Particle.prototype.start = function () {
+    };
+    particles.Particle.prototype.update = function () {
+    };
+    particles.Particle.prototype.end = function () {
+    };
+
+    particles.Particle.prototype.pUpdate = function (system, delta, wind, gravity) {
+        var p = this.position,
+            d = this.delay,
+            v = this.velocity,
+            r = this.rotation,
+            dis = this.disappear,
+            disd,
+            b;
+
+        if (d > 0) {
+            d -= delta;
+            this.delay = d;
+            if (d > 0) {
+                return true;
+            } else {
+                this.start();
+            }
+        }
+
+        this.lt += delta;
+        if (this.lt >= this.lifetime) {
+            return false;
+        }
+
+        this.rot += r;
+        if (dis > -1) {
+            disd = this.lifetime - dis;
+            if (this.lt > disd) {
+                this.opacity = 1 - (this.lt - disd) / dis;
+            }
+        }
+        p.add(wind)
+            .add(gravity);
+
+        if (!!v) {
+            p.add(v);
+            v.divideScalar(this.mass);
+        }
+
+        b = this.update();
+        return typeof b === 'boolean' ? b : true;
+    };
+
+    particles.Particle.prototype.pEnd = function () {
+        this.end();
+        if (!!this.position) {
+            this.position = null;
+        }
+    };
+
+}());
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        dom = bloom.ns('utilities.dom'),
+        core = bloom.ns('core');
+
+    particles.ParticleHTML = function (opts) {
+        particles.Particle.call(this, opts);
+        this.classname = opts && opts.hasOwnProperty('classname') ? opts.classname : '';
+        this.content = opts && opts.hasOwnProperty('content') ? opts.content : '';
+        this.container = opts && opts.hasOwnProperty('container') ? opts.container : null;
+    };
+
+    bloom.inherits(particles.ParticleHTML, particles.Particle);
+
+    particles.ParticleHTML.prototype.start = function () {
+        this.element = dom.create('span', {
+            'class': 'particle ' + this.classname,
+            innerHTML: this.content
+        });
+        if (!!this.container) {
+            this.container.appendChild(this.element);
+        }
+    };
+
+    particles.ParticleHTML.prototype.update = function () {
+        var s = this.element.style,
+            p = this.position,
+            r = this.rot,
+            o = this.opacity;
+
+        s.left = p.x + 'px';
+        s.bottom = p.y + 'px';
+        if (!!r) {
+            s.transform = 'rotate(' + r + 'deg)';
+        }
+        if (!!o && o < 1) {
+            s.opacity = o;
+        }
+    };
+
+    particles.ParticleHTML.prototype.end = function () {
+        var e = this.element;
+        if (!!e) {
+            if (e.parentNode) {
+                e.parentNode.removeChild(e);
+            }
+            this.element = null;
+        }
+        if (!!this.container) {
+            this.container = null;
+        }
+    };
+
+
+}());
+/*global bloom*/
+(function () {
+    'use strict';
+
+    var particles = bloom.ns('particles'),
+        core = bloom.ns('core');
+
+    particles.System = function () {
+        this.gravity = new core.Vector(0, -1);
+        this.wind = new core.Vector();
+        this.particles = [];
+    };
+
+
+    particles.System.prototype.add = function (p) {
+        if (p.delay === 0) {
+            p.start();
+        }
+        this.particles.push(p);
+    };
+
+    particles.System.prototype.update = function (time, delta) {
+        var ps = this.particles,
+            p,
+            i,
+            l = ps.length,
+            currWind = this.wind.clone().multiplyScalar(delta / 10),
+            currGravity = this.gravity.clone().multiplyScalar(delta / 10);
+
+        for (i = l - 1; i >= 0; i -= 1) {
+            p = ps[i];
+            if (!p.pUpdate(this, delta, currWind, currGravity)) {
+                p.pEnd();
+                ps.splice(i, 1);
+            }
+        }
+    };
+    particles.System.prototype.end = function (p) {
+        var ps = this.particles,
+            i,
+            l = ps.length;
+        for (i = l - 1; i >= 0; i -= 1) {
+            ps[i].pEnd();
+        }
+    };
+
+
+}());
 
 
 (function() {
@@ -877,6 +1754,8 @@
     tween.Tween.prototype.delay = 0;
     tween.Tween.prototype.elapsed = 0;
     tween.Tween.prototype.duration = 1000;
+    tween.Tween.prototype.onEnd = null;
+    tween.Tween.prototype.onUpdate = null;
     tween.Tween.prototype.init = function (opts) {
         if (opts.hasOwnProperty('delay') && opts.delay !== undefined) {
             this.delay = opts.delay;
@@ -898,6 +1777,17 @@
         } else {
             this.interpolation = interpolation.Linear;
         }
+        if (opts.hasOwnProperty('onUpdate') && opts.onUpdate !== undefined) {
+            this.onUpdate = opts.onUpdate;
+        } else {
+            this.onUpdate = null;
+        }
+        if (opts.hasOwnProperty('onEnd') && opts.onEnd !== undefined) {
+            this.onEnd = opts.onEnd;
+        } else {
+            this.onEnd = null;
+        }
+
         if (opts.hasOwnProperty('startValues') && opts.startValues !== undefined) {
             this.startValues = opts.startValues;
         } else if (opts.hasOwnProperty('from') && opts.from !== undefined) {
@@ -916,20 +1806,29 @@
 
         this.elapsed = 0;
         this.result = {};
+        this.update(0, 0, true);
     };
 
-    tween.Tween.prototype.update = function (time, delta) {
+    tween.Tween.prototype.update = function (time, delta, force) {
         var starters = this.startValues,
             enders = this.endValues,
             object = this.result,
             elapsed = this.elapsed,
             duration = this.duration,
+            delay = this.delay,
             ended = false,
             start,
             end,
             value,
             property,
             cb = this.onUpdate;
+
+        if (!force && this.delay > 0) {
+            this.delay -= delta;
+            if (this.delay > 0) {
+                return true;
+            }
+        }
 
         elapsed += delta;
         if (elapsed >= duration) {
@@ -998,7 +1897,7 @@
 
     tween.tweener = new tween.Tweener();
 
-    tween.tween = function (from, to, duration, cb, easing, interpolation) {
+    tween.tween = function (from, to, duration, cb, easing, delay) {
         var tt = tween.tweener,
             p = tt.pool,
             t = p.get();
@@ -1007,15 +1906,13 @@
             startValues: from,
             endValues: to,
             duration: duration,
+            delay: delay,
             easing: easing,
-            interpolation: interpolation
+            onUpdate: cb,
+            onEnd: function () {
+                p.release(t);
+            }
         });
-
-        t.onUpdate = cb;
-
-        t.onEnd = function () {
-            p.release(t);
-        };
 
         tt.add(t);
     };
@@ -1186,882 +2083,6 @@
 
             return s.join('').trim().replace(/[^a-z0-9\-]/g,' ').split(' ').join('-').replace(/[\-]{1,}/g, char || '-');
     };
-}());
-
-/*global bloom*/
-(function () {
-    'use strict';
-
-    var particles = bloom.ns('particles'),
-        core = bloom.ns('core');
-
-    particles.Emitter = function (opts) {
-        this.position = opts && opts.hasOwnProperty('position') ? opts.position : new core.Vector();
-        this.num = opts && opts.hasOwnProperty('num') ? opts.num : 10;
-        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : 1000;
-        this.constr = particles.Particle;
-    };
-
-    particles.Emitter.prototype.emit = function (system, num, factory) {
-        var p;
-        while (num >= 0) {
-            p = this.create(system, factory);
-            num -= 1;
-        }
-    };
-
-    particles.Emitter.prototype.create = function (system, factory) {
-        var p = !!factory ? factory() : new this.constr();
-        if (!!this.position && !p.position) {
-            p.position.copy(this.position);
-        }
-        if (p.lifetime === null) {
-            p.lifetime = this.lifetime;
-        }
-        system.add(p);
-        return p;
-    };
-
-
-    particles.Emitter.prototype.end = function () {
-        if (!!this.position) {
-            this.position = null;
-        }
-    };
-
-}());
-/*global bloom*/
-(function () {
-    'use strict';
-
-    var particles = bloom.ns('particles'),
-        core = bloom.ns('core');
-
-    particles.Particle = function (opts) {
-        this.lifetime = opts && opts.hasOwnProperty('lifetime') ? opts.lifetime : 1000;
-        this.lt = 0;
-        this.position = opts && opts.hasOwnProperty('position') ? opts.position : new core.Vector();
-        this.rotation = opts && opts.hasOwnProperty('rotation') ? opts.rotation : 0;
-        this.rot = 0;
-        this.velocity = opts && opts.hasOwnProperty('velocity') ? opts.velocity : null;
-        this.delay = opts && opts.hasOwnProperty('delay') ? opts.delay : 0;
-        this.opacity = 1;
-        this.mass = opts && opts.hasOwnProperty('mass') ? opts.mass : 1.5;
-        this.disappear = opts && opts.hasOwnProperty('disappear') ? opts.disappear : -1;
-        this.start();
-    };
-
-    particles.Particle.prototype.start = function () {
-    };
-    particles.Particle.prototype.update = function () {
-    };
-    particles.Particle.prototype.end = function () {
-    };
-
-    particles.Particle.prototype.pUpdate = function (system, delta, wind, gravity) {
-        var p = this.position,
-            d = this.delay,
-            v = this.velocity,
-            r = this.rotation,
-            dis = this.disappear,
-            disd,
-            b;
-
-        if (d > 0) {
-            d -= delta;
-            this.delay = d;
-            if (d > 0) {
-                return true;
-            } else {
-                this.start();
-            }
-        }
-
-        this.lt += delta;
-        if (this.lt >= this.lifetime) {
-            return false;
-        }
-
-        this.rot += r;
-        if (dis > -1) {
-            disd = this.lifetime - dis;
-            if (this.lt > disd) {
-                this.opacity = 1 - (this.lt - disd) / dis;
-            }
-        }
-        p.add(wind)
-            .add(gravity);
-
-        if (!!v) {
-            p.add(v);
-            v.divideScalar(this.mass);
-        }
-
-        b = this.update();
-        return typeof b === 'boolean' ? b : true;
-    };
-
-    particles.Particle.prototype.pEnd = function () {
-        this.end();
-        if (!!this.position) {
-            this.position = null;
-        }
-    };
-
-}());
-/*global bloom*/
-(function () {
-    'use strict';
-
-    var particles = bloom.ns('particles'),
-        dom = bloom.ns('utilities.dom'),
-        core = bloom.ns('core');
-
-    particles.ParticleHTML = function (opts) {
-        particles.Particle.call(this, opts);
-        this.classname = opts && opts.hasOwnProperty('classname') ? opts.classname : '';
-        this.content = opts && opts.hasOwnProperty('content') ? opts.content : '';
-        this.container = opts && opts.hasOwnProperty('container') ? opts.container : null;
-    };
-
-    bloom.inherits(particles.ParticleHTML, particles.Particle);
-
-    particles.ParticleHTML.prototype.start = function () {
-        this.element = dom.create('span', {
-            'class': 'particle ' + this.classname,
-            innerHTML: this.content
-        });
-        if (!!this.container) {
-            this.container.appendChild(this.element);
-        }
-    };
-
-    particles.ParticleHTML.prototype.update = function () {
-        var s = this.element.style,
-            p = this.position,
-            r = this.rot,
-            o = this.opacity;
-
-        s.left = p.x + 'px';
-        s.bottom = p.y + 'px';
-        if (!!r) {
-            s.transform = 'rotate(' + r + 'deg)';
-        }
-        if (!!o && o < 1) {
-            s.opacity = o;
-        }
-    };
-
-    particles.ParticleHTML.prototype.end = function () {
-        var e = this.element;
-        if (!!e) {
-            if (e.parentNode) {
-                e.parentNode.removeChild(e);
-            }
-            this.element = null;
-        }
-        if (!!this.container) {
-            this.container = null;
-        }
-    };
-
-
-}());
-/*global bloom*/
-(function () {
-    'use strict';
-
-    var particles = bloom.ns('particles'),
-        core = bloom.ns('core');
-
-    particles.System = function () {
-        this.gravity = new core.Vector(0, -1);
-        this.wind = new core.Vector();
-        this.particles = [];
-    };
-
-
-    particles.System.prototype.add = function (p) {
-        if (p.delay === 0) {
-            p.start();
-        }
-        this.particles.push(p);
-    };
-
-    particles.System.prototype.update = function (time, delta) {
-        var ps = this.particles,
-            p,
-            i,
-            l = ps.length,
-            currWind = this.wind.clone().multiplyScalar(delta / 10),
-            currGravity = this.gravity.clone().multiplyScalar(delta / 10);
-
-        for (i = l - 1; i >= 0; i -= 1) {
-            p = ps[i];
-            if (!p.pUpdate(this, delta, currWind, currGravity)) {
-                p.pEnd();
-                ps.splice(i, 1);
-            }
-        }
-    };
-    particles.System.prototype.end = function (p) {
-        var ps = this.particles,
-            i,
-            l = ps.length;
-        for (i = l - 1; i >= 0; i -= 1) {
-            ps[i].pEnd();
-        }
-    };
-
-
-}());
-
-
-(function() {
-    var core = bloom.ns('core'),
-        array = bloom.ns('utilities.array'),
-        string = bloom.ns('utilities.string');
-
-    core.Actor = function() {
-        this.components = [];
-        this.layer = null;
-        this.state = new core.State();
-    };
-
-    core.Actor.prototype.play = function() {
-        array.apply(this.components, 'play');
-    };
-
-    core.Actor.prototype.pause = function() {
-        array.apply(this.components, 'pause');
-    };
-
-    core.Actor.prototype.getGame = function() {
-        return this.layer.scene.game;
-    };
-
-    core.Actor.prototype.requireRedraw = function() {
-        var cs = this.components,
-            i,
-            l = cs.length;
-        for (i = 0; i < l; i += 1) {
-            if (typeof cs[i].requireRedraw === 'function') {
-                cs[i].requireRedraw();
-            }
-        }
-    };
-
-    core.Actor.prototype.getComponent = function(constructor) {
-        var cs = this.components,
-            i,
-            l = cs.length;
-        for (i = 0; i < l; i += 1) {
-            if (cs[i] instanceof constructor) {
-                return cs[i];
-            }
-        }
-        return null;
-    };
-
-    core.Actor.prototype.add = function(component) {
-        if (!component) {
-            throw new Error('Component is undefined');
-        }
-        this.components.push(component);
-        component.state = this.state;
-        component.actor = this;
-        this.layer.registerComponent(component);
-    };
-
-    core.Actor.prototype.remove = function(component) {
-        var cs = this.components,
-            i = cs.indexOf(component);
-        if (i > -1) {
-            cs.splice(i, 1);
-        }
-        component.state = null;
-        component.actor = null;
-        this.layer.unregisterComponent(component);
-    };
-}());
-
-/*global bloom*/
-
-(function () {
-    'use strict';
-
-    var core = bloom.ns('core');
-
-    core.Component = function () {
-
-    };
-    core.Component.prototype.actor = null;
-    core.Component.prototype.state = null;
-    core.Component.prototype.getLayer = function () {
-        if (this.actor) {
-            return this.actor.layer;
-        }
-        return null;
-    };
-    core.Component.prototype.getComponent = function (constructor) {
-        if (this.actor) {
-            return this.actor.getComponent(constructor);
-        }
-        return null;
-    };
-    core.Component.prototype.getActor = function () {
-        return this.actor;
-    };
-    core.Component.prototype.getLayer = function () {
-        return this.actor.layer;
-    };
-    core.Component.prototype.getScene = function () {
-        return this.actor.layer.scene;
-    };
-    core.Component.prototype.getGame = function () {
-        return this.actor.layer.scene.game;
-    };
-}());
-
-
-
-(function() {
-    var core = bloom.ns('core'),
-        network = bloom.ns('network'),
-        sound = bloom.ns('sound'),
-        dom = bloom.ns('utilities.dom'),
-        string = bloom.ns('utilities.string');
-
-    core.instances = [];
-
-    /**
-     * A game is a holder for the scenes. It allows to
-     * navigate between each scene. It's also the initiator
-     * of the main loop for each game.
-     *
-     */
-    core.Game = function(initializer) {
-        this.current = null;
-        this.scenes = [];
-        this.scenesById = {};
-        this.loader = null;
-        this.manifest = null;
-        this.paused = false;
-        this.ts = 0;
-        core.instances.push(this);
-
-        if (initializer instanceof core.GameInitializer) {
-            this.loader = initializer.loader;
-            this.manifest = initializer.manifest;
-        }
-
-        this.sounds = new sound.SoundStore({
-            manifest: this.manifest
-        });
-
-        dom.get('#wrapper').innerHTML = '';
-    };
-
-    core.Game.prototype.apply = function(scene, f) {
-        if (!scene) {
-            return;
-        }
-        if (f === 'end' && typeof scene.endTransition === 'function') {
-            scene.endTransition(function() {
-                scene.applyAutoRemoval();
-                if (typeof scene[f] === 'function') {
-                    scene.end();
-                }
-            });
-            return;
-        }
-        if (typeof scene[f] === 'function') {
-            if (f === 'end') {
-                scene.applyAutoRemoval();
-            }
-            scene[f]();
-        }
-        if (f === 'start' && typeof scene.startTransition === 'function') {
-            scene.startTransition();
-        }
-    };
-
-    core.Game.prototype.start = function () {
-        if (!this.scenes.length) {
-            throw new Error('No scene to start with!');
-        }
-        if (this.current === null) {
-            this.goto('main');
-        }
-    };
-    core.Game.prototype.goto = function(id) {
-        if (this.current !== null) {
-            this.apply(this.current, 'end');
-            this.current = null;
-        } else {
-            console.log(dom.get('#wrapper').innerHTML);
-            dom.get('#wrapper').innerHTML = '';
-        }
-        if (!this.scenesById.hasOwnProperty(id)) {
-            console.warn('Scene not found: "' + id + '"');
-            return;
-        }
-
-        this.current = this.scenesById[id];
-        this.apply(this.current, 'start');
-        if (!!this.paused) {
-            this.play();
-        }
-    };
-    core.Game.prototype.pause = function() {
-        if (!this.paused) {
-            this.paused = true;
-            this.apply(this.current, 'triggerPause');
-        }
-    };
-    core.Game.prototype.play = function() {
-        if (!!this.paused) {
-            this.paused = false;
-            this.apply(this.current, 'triggerPlay');
-        }
-    };
-    core.Game.prototype.switchPause = function() {
-        if (this.paused) {
-            this.play();
-        } else {
-            this.pause();
-        }
-    };
-    core.Game.prototype.update = function (time, delta) {
-        this.delta = time - this.ts;
-        this.ts = time;
-        if (!!this.paused) {
-            return;
-        }
-        if (this.current !== null) {
-            this.current.update(time, this.delta);
-        }
-    };
-    core.Game.prototype.add = function(scene) {
-        if (!(scene instanceof core.Scene)) {
-            throw new Error('Given scene must be a bloom.core.Scene instance');
-        }
-        var id,
-            sbi = this.scenesById,
-            scs = this.scenes;
-
-        if (!scene.id && !scs.length) {
-            scene.id = 'main';
-        }
-        id = scene.id;
-        if (!id) {
-            throw new Error('Scene requires an ID');
-        }
-
-        scene.game = this;
-
-        if (sbi.hasOwnProperty(id)) {
-            if (sbi[id] !== scene) {
-                throw new Error(string.format('Another scene already has ID "{0}". Each scene ID must be unique.', id));
-            }
-        } else {
-            scs.push(scene);
-            sbi[id] = scene;
-        }
-    };
-    core.Game.prototype.remove = function(scene) {
-        if (!(scene instanceof core.Scene)) {
-            throw new Error('Given scene must be a bloom.core.Scene instance');
-        }
-
-        scene.game = null;
-
-        var i = this.scenes.indexOf(scene);
-        if (i > -1) {
-            this.scenes.splice(i, 1);
-        }
-        if (this.scenesById.hasOwnProperty(scene.id)) {
-            delete this.scenesById[scene.id];
-        }
-    };
-    core.Game.prototype.end = function() {
-        var is = core.instances,
-            i = is.indexOf(this);
-        if (i > -1) {
-            is.splice(i, 1);
-        }
-        this.current = null;
-    };
-
-}());
-
-
-
-(function() {
-    var core = bloom.ns('core'),
-        array = bloom.ns('utilities.array');
-
-    core.Layer = function(opts) {
-        this.actors = [];
-        this.updatable = [];
-        this.scene = null;
-        this.dummy = null;
-        this.element = null;
-        this.id = opts && opts.hasOwnProperty('id') ? opts.id : null;
-    };
-
-    core.Layer.prototype.getElement = function() {
-        return this.element;
-    };
-    core.Layer.prototype.play = function() {
-        array.apply(this.actors, 'play');
-    };
-
-    core.Layer.prototype.pause = function() {
-        array.apply(this.actors, 'pause');
-    };
-
-    core.Layer.prototype.add = function(actor) {
-        if (actor instanceof core.Component) {
-            this.addComponent(actor);
-            return;
-        }
-
-        this.actors.push(actor);
-        actor.layer = this;
-
-        if (typeof actor.update === 'function') {
-            this.updatable.push(actor);
-        }
-        if (typeof actor.start === 'function') {
-            actor.start();
-        }
-    };
-    core.Layer.prototype.update = function(time, delta) {
-        var us = this.updatable,
-            i,
-            l = us.length;
-
-        for (i = 0; i < l; i += 1) {
-            us[i].update(time, delta);
-        };
-    };
-    core.Layer.prototype.remove = function(actor) {
-        if (actor instanceof core.Component) {
-            this.removeComponent(actor);
-            return;
-        }
-
-        var os = this.actors,
-            us = this.updatable,
-            i;
-
-        if (typeof actor.end === 'function') {
-            actor.end();
-        }
-
-        this.unregisterComponentOf(actor);
-
-        actor.layer = null;
-
-        i = os.indexOf(actor);
-        if (i > -1) {
-            os.splice(i, 1);
-        }
-
-        i = us.indexOf(actor);
-        if (i > -1) {
-            us.splice(i, 1);
-        }
-    };
-
-    core.Layer.prototype.addComponent = function(component) {
-        if (!this.dummy) {
-            this.dummy = new core.Actor();
-            this.add(this.dummy);
-        }
-        this.dummy.add(component);
-    };
-    core.Layer.prototype.removeComponent = function(component) {
-        if (!!this.dummy) {
-            this.dummy.remove(component);
-        }
-    };
-
-    core.Layer.prototype.registerComponent = function(component) {
-        this.attachComponent(component);
-        if (typeof component.start === 'function') {
-            component.start();
-        }
-        if (typeof component.update === 'function') {
-            this.updatable.push(component);
-        }
-    };
-    core.Layer.prototype.unregisterComponentOf = function(actor) {
-        var ccs = actor.components, i, l = ccs.length;
-        for (i = 0; i < l; i += 1) {
-            this.unregisterComponent(ccs[i]);
-        }
-    };
-    core.Layer.prototype.unregisterComponent = function(component) {
-        var us = this.updatable,
-            i;
-
-        if (typeof component.end === 'function') {
-            component.end();
-        }
-
-        this.detachComponent(component);
-
-        if (typeof component.update === 'function') {
-            i = us.indexOf(component);
-            if (i > -1) {
-                us.splice(i, 1);
-            }
-        }
-    };
-    core.Layer.prototype.attachComponent = function(component) {};
-    core.Layer.prototype.detachComponent = function(component) {};
-
-}());
-
-
-
-(function() {
-    var core = bloom.ns('core'),
-        array = bloom.ns('utilities.array');
-
-    core.Scene = function(options) {
-        this.id = null;
-        this.game = null;
-        this.layers = [];
-        this.paused = false;
-        this.autoRemoval = true;
-        if (!!options) {
-            if (options.hasOwnProperty('id')) {
-                this.id = options.id;
-            }
-        }
-    };
-
-    core.Scene.prototype.triggerPlay = function() {
-        array.apply(this.layers, 'play');
-        if (typeof this.play === 'function') {
-            this.play();
-        }
-    };
-
-    core.Scene.prototype.triggerPause = function() {
-        array.apply(this.layers, 'pause');
-        if (typeof this.pause === 'function') {
-            this.pause();
-        }
-    };
-
-    core.Scene.prototype.update = function (time, delta) {
-        var ls = this.layers, i, l = ls.length;
-        for (i = 0; i < l; i += 1) {
-            ls[i].update(time, delta);
-        }
-    };
-    core.Scene.prototype.add = function(layer) {
-        if (!(layer instanceof core.Layer)) {
-            throw new Error('Given layer must be a bloom.core.Layer instance');
-        }
-        layer.scene = this;
-        this.layers.push(layer);
-        if (typeof layer.start === 'function') {
-            layer.start();
-        }
-    };
-    core.Scene.prototype.applyAutoRemoval = function() {
-        if (!this.autoRemoval) {
-            return;
-        }
-        var ls = this.layers, l;
-        for (l = ls.length - 1; l >= 0; l -= 1) {
-            this.remove(ls[l]);
-        }
-    };
-    core.Scene.prototype.remove = function(layer) {
-        if (!(layer instanceof core.Layer)) {
-            throw new Error('Given layer must be a bloom.core.Layer instance');
-        }
-
-        layer.scene = null;
-        if (typeof layer.end === 'function') {
-            layer.end();
-        }
-        var i = this.layers.indexOf(layer);
-        if (i > -1) {
-            this.layers.splice(i, 1);
-        }
-    };
-    core.Scene.prototype.destroy = function() {
-        this.layers = null;
-    };
-
-}());
-
-
-
-(function() {
-    var core = bloom.ns('core');
-
-    core.State = function () {
-        bloom.EventDispatcher.call(this);
-        this.v = {};
-    };
-
-    bloom.inherits(core.State, bloom.EventDispatcher);
-
-    core.State.prototype.increment = function(key, value) {
-        if (!this.has(key)) {
-            this.set(key, 0);
-        }
-        return this.set(key, this.get(key) + (typeof value === 'number' ? value : 1));
-    };
-    core.State.prototype.decrement = function(key, value) {
-        if (!this.has(key)) {
-            this.set(key, 0);
-        }
-        return this.set(key, this.get(key) - (typeof value === 'number' ? value : 1));
-    };
-    core.State.prototype.set = function(key, value) {
-        if (this.v[key] !== value) {
-            this.v[key] = value;
-            var e = {
-                type: 'change',
-                key: key,
-                value: value,
-                state: this
-            };
-            this.dispatch(e);
-        }
-    };
-
-    core.State.prototype.has = function(key) {
-        return this.v.hasOwnProperty(key);
-    };
-    core.State.prototype.get = function(key) {
-        var v = this.v;
-        if (!v.hasOwnProperty(key)) {
-            if (arguments.length > 1) {
-                return arguments[1];
-            }
-            return null;
-        }
-        return this.v[key];
-    };
-
-    core.State.prototype.all = function() {
-        return this.v;
-    };
-
-}());
-
-/*global bloom*/
-
-(function () {
-    'use strict';
-
-    var core = bloom.ns('core');
-
-    core.Vector = function (x, y, z) {
-        if (typeof x === 'number') {
-            this.x = x;
-        }
-        if (typeof y === 'number') {
-            this.y = y;
-        }
-        if (typeof z === 'number') {
-            this.z = z;
-        }
-    };
-
-    core.Vector.prototype.x = 0;
-    core.Vector.prototype.y = 0;
-    core.Vector.prototype.z = 0;
-
-    core.Vector.prototype.clone = function () {
-        return new core.Vector(this.x, this.y, this.z);
-    };
-
-    core.Vector.prototype.copy = function (vector) {
-        this.x = vector.x;
-        this.y = vector.y;
-        this.z = vector.z;
-        return this;
-    };
-    core.Vector.prototype.add = function (vector) {
-        this.x += vector.x;
-        this.y += vector.y;
-        this.z += vector.z;
-        return this;
-    };
-    core.Vector.prototype.multiplyScalar = function (v) {
-        this.x *= v;
-        this.y *= v;
-        this.z *= v;
-        return this;
-    };
-    core.Vector.prototype.multiply = function (vector) {
-        this.x *= vector.x;
-        this.y *= vector.y;
-        this.z *= vector.z;
-        return this;
-    };
-    core.Vector.prototype.divideScalar = function (v) {
-        this.x /= v;
-        this.y /= v;
-        this.z /= v;
-        return this;
-    };
-    core.Vector.prototype.divide = function (vector) {
-        this.x /= vector.x;
-        this.y /= vector.y;
-        this.z /= vector.z;
-        return this;
-    };
-
-}());
-
-/*global bloom, requestAnimationFrame*/
-(function () {
-    'use strict';
-
-    var loop = bloom.ns('core.loop'),
-        debug = bloom.ns('core.debug'),
-        tween = bloom.ns('tween'),
-        core = bloom.ns('core'),
-
-        instances = core.instances,
-        i,
-        l,
-
-        delta,
-        ts = 0,
-        tweener;
-
-    loop.animate = function (time) {
-
-        requestAnimationFrame(loop.animate);
-
-        delta = time - ts;
-        ts = time;
-
-        for (i = 0, l = instances.length; i < l; i += 1) {
-            instances[i].update(ts);
-        }
-
-        if (!tweener) {
-            tweener = tween.tweener;
-        } else {
-            tweener.update(ts, delta);
-        }
-    };
-
-    loop.animate(0);
 }());
 
 

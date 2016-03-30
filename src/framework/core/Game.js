@@ -37,7 +37,7 @@
         dom.get('#wrapper').innerHTML = '';
     };
 
-    core.Game.prototype.apply = function(scene, f) {
+    core.Game.prototype.apply = function(scene, f, id) {
         if (!scene) {
             return;
         }
@@ -47,7 +47,7 @@
                 if (typeof scene[f] === 'function') {
                     scene.end();
                 }
-            });
+            }, id);
             return;
         }
         if (typeof scene[f] === 'function') {
@@ -57,7 +57,7 @@
             scene[f]();
         }
         if (f === 'start' && typeof scene.startTransition === 'function') {
-            scene.startTransition();
+            scene.startTransition(id);
         }
     };
 
@@ -70,11 +70,12 @@
         }
     };
     core.Game.prototype.goto = function(id) {
+        var currentId = null;
         if (this.current !== null) {
-            this.apply(this.current, 'end');
+            currentId = this.current.id;
+            this.apply(this.current, 'end', id);
             this.current = null;
         } else {
-            console.log(dom.get('#wrapper').innerHTML);
             dom.get('#wrapper').innerHTML = '';
         }
         if (!this.scenesById.hasOwnProperty(id)) {
@@ -83,7 +84,7 @@
         }
 
         this.current = this.scenesById[id];
-        this.apply(this.current, 'start');
+        this.apply(this.current, 'start', currentId);
         if (!!this.paused) {
             this.play();
         }

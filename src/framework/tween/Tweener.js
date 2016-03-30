@@ -31,7 +31,7 @@
 
     tween.tweener = new tween.Tweener();
 
-    tween.tween = function (from, to, duration, cb, easing, interpolation) {
+    tween.tween = function (from, to, duration, cb, easing, delay) {
         var tt = tween.tweener,
             p = tt.pool,
             t = p.get();
@@ -40,15 +40,13 @@
             startValues: from,
             endValues: to,
             duration: duration,
+            delay: delay,
             easing: easing,
-            interpolation: interpolation
+            onUpdate: cb,
+            onEnd: function () {
+                p.release(t);
+            }
         });
-
-        t.onUpdate = cb;
-
-        t.onEnd = function () {
-            p.release(t);
-        };
 
         tt.add(t);
     };
